@@ -21,7 +21,7 @@ ClientConnection::~ClientConnection()
 
 void ClientConnection::chat_with_client()
 {
-  // TODO: implement
+  //TODO: implement
 }
 
 // TODO: additional member functions

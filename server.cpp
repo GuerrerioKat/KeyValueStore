@@ -49,6 +49,7 @@ void *Server::client_worker( void *arg )
   client->chat_with_client();
   return nullptr;
 */
+  return nullptr;
 }
 
 void Server::log_error( const std::string &what )

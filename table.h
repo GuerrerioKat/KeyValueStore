@@ -8,7 +8,9 @@
 class Table {
 private:
   std::string m_name;
-  // TODO: add member variables
+  std::map<std::string, std::string> body;
+  std::map<std::string, std::string> suggestions;
+  pthread_mutex_t m_mutex;
 
   // copy constructor and assignment operator are prohibited
   Table( const Table & );

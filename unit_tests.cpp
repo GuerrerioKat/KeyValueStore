@@ -1,5 +1,5 @@
 // Unit tests
-
+#include <iostream>
 #include "message.h"
 #include "message_serialization.h"
 #include "table.h"
@@ -302,6 +302,7 @@ void test_message_serialization_encode( TestObjs *objs )
   std::string s;
 
   MessageSerialization::encode( objs->login_req, s );
+  
   ASSERT( "LOGIN alice\n" == s );
 
   MessageSerialization::encode( objs->create_req, s );
@@ -352,7 +353,7 @@ void test_message_serialization_decode( TestObjs *objs )
   ASSERT( MessageType::CREATE == msg.get_message_type() );
   ASSERT( 1 == msg.get_num_args() );
   ASSERT( "invoices" == msg.get_table() );
-
+  
   MessageSerialization::decode( objs->encoded_data_resp, msg );
   ASSERT( MessageType::DATA == msg.get_message_type() );
   ASSERT( 1 == msg.get_num_args() );

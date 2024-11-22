@@ -8,4 +8,7 @@ namespace MessageSerialization {
   void decode(const std::string &encoded_msg, Message &msg);
 };
 
+std::string message_type_to_string(MessageType type);
+MessageType string_to_message_type(const std::string& str);
+
 #endif // MESSAGE_SERIALIZATION_H

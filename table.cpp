@@ -5,52 +5,66 @@
 
 Table::Table( const std::string &name )
   : m_name( name )
-  // TODO: initialize additional member variables
 {
-  // TODO: implement
+  pthread_mutex_init(&m_mutex, nullptr);
 }
 
 Table::~Table()
 {
-  // TODO: implement
+  pthread_mutex_destroy(&m_mutex);
 }
 
 void Table::lock()
 {
-  // TODO: implement
+  //pthread_mutex_lock(&m_mutex);
 }
 
 void Table::unlock()
 {
-  // TODO: implement
+  //pthread_mutex_unlock(&m_mutex);
 }
 
 bool Table::trylock()
 {
-  // TODO: implement
+  //return pthread_mutex_trylock(&m_mutex) == 0;
+  return false;
 }
 
 void Table::set( const std::string &key, const std::string &value )
 {
-  // TODO: implement
+  suggestions[key] = value;
 }
 
 std::string Table::get( const std::string &key )
 {
-  // TODO: implement
+
+  if (body.find(key) != body.end()) {
+    return body[key];
+  }
+
+  if (suggestions.find(key) != suggestions.end()) {
+    return suggestions[key];
+  }
+
+  return "";
+
 }
 
 bool Table::has_key( const std::string &key )
 {
-  // TODO: implement
+  return body.find(key) != body.end() || suggestions.find(key) != suggestions.end();
 }
 
 void Table::commit_changes()
 {
-  // TODO: implement
+  for (std::map<std::string, std::string>::iterator it = suggestions.begin(); it != suggestions.end(); ++it) {
+    body[it->first] = it->second;
+  }
+
+  suggestions.clear();
 }
 
 void Table::rollback_changes()
 {
-  // TODO: implement
+  suggestions.clear();
 }
