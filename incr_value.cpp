@@ -52,13 +52,13 @@ int main(int argc, char **argv) {
   if (clientfd > 0) {
     std::vector<Message> server_requests;
 
+    Message msg_login(MessageType::LOGIN, {username});
+    server_requests.push_back(msg_login);
+
     if (use_transaction) {
       Message msg_begin(MessageType::BEGIN, {});
       server_requests.push_back(msg_begin);
     }
-
-    Message msg_login(MessageType::LOGIN, {username});
-    server_requests.push_back(msg_login);
     
     Message msg_get(MessageType::GET, {table, key});
     server_requests.push_back(msg_get);
