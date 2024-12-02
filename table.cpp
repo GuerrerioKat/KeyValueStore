@@ -16,18 +16,17 @@ Table::~Table()
 
 void Table::lock()
 {
-  //pthread_mutex_lock(&m_mutex);
+  pthread_mutex_lock(&m_mutex);
 }
 
 void Table::unlock()
 {
-  //pthread_mutex_unlock(&m_mutex);
+  pthread_mutex_unlock(&m_mutex);
 }
 
 bool Table::trylock()
 {
-  //return pthread_mutex_trylock(&m_mutex) == 0;
-  return false;
+  return pthread_mutex_trylock(&m_mutex) == 0;
 }
 
 void Table::set( const std::string &key, const std::string &value )
