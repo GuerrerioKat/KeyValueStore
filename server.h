@@ -30,11 +30,10 @@ public:
   static void *client_worker( void *arg );
 
   void log_error( const std::string &what );
-  void create_table( const std::string &name );
-  Table *find_table( const std::string &name );
 
   // TODO: add member functions
-
+  void create_table( const std::string &name );
+  Table *find_table( const std::string &name );
   // Some suggested member functions:
 /*
   void create_table( const std::string &name );
