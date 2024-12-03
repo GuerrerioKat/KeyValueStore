@@ -33,6 +33,7 @@ public:
   std::string get( const std::string &key );
   void commit_changes();
   void rollback_changes();
+  void print_contents();
 };
 
 #endif // TABLE_H

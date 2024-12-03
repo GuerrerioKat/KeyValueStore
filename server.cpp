@@ -1,20 +1,20 @@
 #include <iostream>
 #include <cassert>
 #include <memory>
+#include <iostream>
 #include "csapp.h"
 #include "exceptions.h"
 #include "guard.h"
 #include "server.h"
+#include "client_connection.h"
 
-Server::Server()
-  // TODO: initialize member variables
-{
-  // TODO: implement
-}
+Server::Server() : listen_fd(-1) {}
 
 Server::~Server()
 {
-  // TODO: implement
+  if (listen_fd >= 0) {
+    Close(listen_fd);
+  }
 }
 
 void Server::listen(const std::string &port) {
@@ -26,7 +26,6 @@ void Server::listen(const std::string &port) {
 
 void Server::server_loop()
 {
-  // TODO: implement
   while (true) {
     struct sockaddr_storage client_addr;
     socklen_t client_len = sizeof(client_addr);
@@ -60,7 +59,6 @@ void Server::server_loop()
 
 void *Server::client_worker( void *arg )
 {
-  // TODO: implement
   std::unique_ptr<ClientConnection> client(static_cast<ClientConnection *>(arg));
 
   try {
@@ -93,6 +91,7 @@ void Server::create_table(const std::string &name) {
     throw std::runtime_error("This table already exists: " + name);
   }
   tables[name] = std::make_unique<Table>(name);
+  print_tables();
 }
 
 Table *Server::find_table(const std::string &name) {
@@ -101,5 +100,19 @@ Table *Server::find_table(const std::string &name) {
   if (it == tables.end()) {
     throw std::runtime_error("This table could not be found: " + name);
   }
+  print_tables();
   return it->second.get();
+}
+
+void Server::print_tables()
+{
+  std::lock_guard<std::mutex> lock(tables_mutex);
+
+  std::cout << "Server Tables:" << std::endl;
+  for (const auto& table_entry : tables) {
+    // table_entry.first is the table name (key in the map)
+    // table_entry.second is a unique_ptr<Table>
+    Table* table = table_entry.second.get();
+    table->print_contents();
+  }
 }

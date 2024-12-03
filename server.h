@@ -5,6 +5,7 @@
 #include <string>
 #include <mutex>
 #include <pthread.h>
+#include <memory>
 #include "table.h"
 #include "client_connection.h"
 
@@ -30,16 +31,9 @@ public:
   static void *client_worker( void *arg );
 
   void log_error( const std::string &what );
-
-  // TODO: add member functions
   void create_table( const std::string &name );
   Table *find_table( const std::string &name );
-  // Some suggested member functions:
-/*
-  void create_table( const std::string &name );
-  Table *find_table( const std::string &name );
-  void log_error( const std::string &what );
-*/
+  void print_tables();
 };
 
 

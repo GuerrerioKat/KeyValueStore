@@ -1,4 +1,5 @@
 #include <cassert>
+#include <iostream>
 #include "table.h"
 #include "exceptions.h"
 #include "guard.h"
@@ -66,4 +67,26 @@ void Table::commit_changes()
 void Table::rollback_changes()
 {
   suggestions.clear();
+}
+
+void Table::print_contents()
+{
+  // Use Guard to lock the mutex (assuming Guard is properly implemented)
+  Guard lock(m_mutex);
+
+  std::cout << "Table: " << m_name << std::endl;
+
+  // Print committed entries
+  std::cout << "  Committed entries:" << std::endl;
+  for (const auto& entry : body) {
+    std::cout << "    Key: " << entry.first << ", Value: " << entry.second << std::endl;
+  }
+
+  // Print tentative (uncommitted) changes
+  if (!suggestions.empty()) {
+    std::cout << "  Tentative entries:" << std::endl;
+    for (const auto& entry : suggestions) {
+      std::cout << "    Key: " << entry.first << ", Value: " << entry.second << std::endl;
+    }
+  }
 }

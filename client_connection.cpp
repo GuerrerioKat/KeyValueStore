@@ -1,5 +1,7 @@
 #include <iostream>
 #include <cassert>
+#include <stack>
+#include <sstream>
 #include "csapp.h"
 #include "message.h"
 #include "message_serialization.h"
@@ -16,46 +18,255 @@ ClientConnection::ClientConnection( Server *server, int client_fd )
 
 ClientConnection::~ClientConnection()
 {
-  // TODO: implement
   Close(m_client_fd);
 }
 
-void ClientConnection::chat_with_client()
-{
-  //TODO: implement
-  char buf[MAXLINE];
-  while (true) {
-    ssize_t n = Rio_readlineb(&m_fdbuf, buf, MAXLINE);
-    if (n <= 0) {
-      break;
-    }
-    std::string request(buf, n);
-    std::string response;
+void ClientConnection::chat_with_client() {
+    char buf[MAXLINE];
+    int num_requests = 0;
+    while (true) {
+        ssize_t n = Rio_readlineb(&m_fdbuf, buf, MAXLINE);
+        if (n <= 0) {
+            break;
+        }
+        std::string request(buf, n);
+        std::string response;
+        Table *table = nullptr;
+        try {
+            Message request_msg;
+            MessageSerialization::decode(request, request_msg);
+            MessageType message_type = request_msg.get_message_type();
+            std::string command = message_type_to_string(message_type);
 
-    try {
-      if (request.substr(0, 13) == "CREATE TABLE ") {
-        std::string table_name = request.substr(13);
-        m_server->create_table(table_name);
-        response = "Table created successfully\n";
-      } else if (request.substr(0, 10) == "GET TABLE ") {
-        std::string table_name = request.substr(10);
-        Table *table = m_server->find_table(table_name);
+            if (num_requests == 0 && command != "LOGIN") {
+                Message msg(MessageType::FAILED, {"First command must be a LOGIN"});
+                MessageSerialization::encode(msg, response);
+                Rio_writen(m_client_fd, response.c_str(), response.size());
+                continue;
+            }
+
+            if (command == "LOGIN") {
+                // No action required for LOGIN
+                Message msg(MessageType::OK, {});
+                MessageSerialization::encode(msg, response);
+            } else if (command == "CREATE") {
+                std::string table_name = request_msg.get_table();
+                m_server->create_table(table_name);
+                Message msg(MessageType::OK, {});
+                MessageSerialization::encode(msg, response);
+            } else if (command == "GET") {
+                std::string table_name = request_msg.get_table();
+                std::string key = request_msg.get_key();
+                table = m_server->find_table(table_name);
+
+                // Lock the table
+                lock_table(table);
+
+                if (!table->has_key(key)) {
+                    throw OperationException("Key does not exist: " + key);
+                }
+
+                std::string s_value = table->get(key);
+                int value;
+                try {
+                    value = std::stoi(s_value);
+                } catch (const std::invalid_argument&) {
+                    unlock_table(table);
+                    throw OperationException("Value is not a valid integer: " + s_value);
+                } catch (const std::out_of_range&) {
+                    unlock_table(table);
+                    throw OperationException("Value is out of range: " + s_value);
+                }
+
+                stack.push(value);
+
+                // Unlock the table if not in transaction
+                unlock_table(table);
+
+                Message msg(MessageType::OK, {});
+                MessageSerialization::encode(msg, response);
+            } else if (command == "SET") {
+                std::string table_name = request_msg.get_table();
+                std::string key = request_msg.get_key();
+                table = m_server->find_table(table_name);
+
+                // Lock the table
+                lock_table(table);
+
+                if (stack.empty()) {
+                    throw OperationException("Operand stack is empty");
+                }
+
+                int value = stack.top();
+                stack.pop();
+                std::string s_value = std::to_string(value);
+
+                table->set(key, s_value);
+
+                // Commit changes and unlock the table if not in transaction
+                if (!in_transaction) {
+                    table->commit_changes();
+                    unlock_table(table);
+                }
+
+                Message msg(MessageType::OK, {});
+                MessageSerialization::encode(msg, response);
+            } else if (command == "PUSH") {
+                std::string s_value = request_msg.get_value();
+                int value;
+                try {
+                    value = std::stoi(s_value);
+                } catch (const std::invalid_argument&) {
+                    throw OperationException("PUSH argument is not a valid integer: " + s_value);
+                } catch (const std::out_of_range&) {
+                    throw OperationException("PUSH argument is out of range: " + s_value);
+                }
+                stack.push(value);
+                Message msg(MessageType::OK, {});
+                MessageSerialization::encode(msg, response);
+            } else if (command == "POP") {
+                if (stack.empty()) {
+                    throw OperationException("Operand stack is empty");
+                }
+                stack.pop();
+                Message msg(MessageType::OK, {});
+                MessageSerialization::encode(msg, response);
+            } else if (command == "TOP") {
+                if (stack.empty()) {
+                    throw OperationException("Operand stack is empty");
+                }
+                int value = stack.top();
+                Message msg(MessageType::DATA, {std::to_string(value)});
+                MessageSerialization::encode(msg, response);
+            } else if (command == "ADD" || command == "SUB" ||
+                       command == "MUL" || command == "DIV") {
+                handle_arithmetic_operation(command);
+                Message msg(MessageType::OK, {});
+                MessageSerialization::encode(msg, response);
+            } else if (command == "BEGIN") {
+                if (in_transaction) {
+                    throw FailedTransaction("Nested transactions are not allowed");
+                }
+                in_transaction = true;
+                locked_tables.clear();
+                Message msg(MessageType::OK, {});
+                MessageSerialization::encode(msg, response);
+            } else if (command == "COMMIT") {
+                if (!in_transaction) {
+                    throw OperationException("No transaction in progress");
+                }
+                // Commit changes to all locked tables and unlock them
+                for (Table* t : locked_tables) {
+                    t->commit_changes();
+                    t->unlock();
+                }
+                locked_tables.clear();
+                in_transaction = false;
+                Message msg(MessageType::OK, {});
+                MessageSerialization::encode(msg, response);
+            } else if (command == "BYE") {
+                // Rollback any transaction in progress
+                if (in_transaction) {
+                    rollback_transaction();
+                }
+                Message msg(MessageType::OK, {});
+                MessageSerialization::encode(msg, response);
+                Rio_writen(m_client_fd, response.c_str(), response.size());
+                break; // End the connection
+            } else {
+                throw InvalidMessage("Invalid command: " + command);
+            }
+
+            Rio_writen(m_client_fd, response.c_str(), response.size());
+            num_requests++;
+        } catch (const InvalidMessage &e) {
+            Message msg(MessageType::ERROR, {e.what()});
+            MessageSerialization::encode(msg, response);
+            Rio_writen(m_client_fd, response.c_str(), response.size());
+            break; // End the connection on ERROR
+        } catch (const FailedTransaction &e) {
+            // Rollback transaction
+            rollback_transaction();
+            Message msg(MessageType::FAILED, {e.what()});
+            MessageSerialization::encode(msg, response);
+            Rio_writen(m_client_fd, response.c_str(), response.size());
+        } catch (const OperationException &e) {
+            Message msg(MessageType::FAILED, {e.what()});
+            MessageSerialization::encode(msg, response);
+            Rio_writen(m_client_fd, response.c_str(), response.size());
+        } catch (const std::exception &e) {
+            // Rollback transaction
+            rollback_transaction();
+            Message msg(MessageType::ERROR, {e.what()});
+            MessageSerialization::encode(msg, response);
+            Rio_writen(m_client_fd, response.c_str(), response.size());
+            break; // End the connection on ERROR
+        }
+        num_requests++;
+    }
+}
+
+void ClientConnection::handle_arithmetic_operation(const std::string& operation) {
+    if (stack.size() < 2) {
+        throw OperationException("Not enough operands on stack");
+    }
+    int value1 = stack.top();
+    stack.pop();
+    int value2 = stack.top();
+    stack.pop();
+
+    int result;
+    if (operation == "ADD") {
+        result = value1 + value2;
+    } else if (operation == "SUB") {
+        result = value2 - value1; // Note the order
+    } else if (operation == "MUL") {
+        result = value1 * value2;
+    } else if (operation == "DIV") {
+        if (value1 == 0) {
+            throw OperationException("Division by zero");
+        }
+        result = value2 / value1; // Note the order
+    } else {
+        throw OperationException("Unknown operation");
+    }
+
+    stack.push(result);
+}
+
+void ClientConnection::lock_table(Table* table) {
+    if (in_transaction) {
+        // Try to lock the table if not already locked
+        if (locked_tables.find(table) == locked_tables.end()) {
+            if (!table->trylock()) {
+                throw FailedTransaction("Could not acquire lock on table " + table->get_name());
+            }
+            locked_tables.insert(table);
+        }
+    } else {
+        // Autocommit mode
         table->lock();
-        response = "Table " + table_name + " found\n";
-        table->unlock();
-      } else {
-        response = "ERROR: Invalid request\n";
-      }
-    } catch (const std::exception &e) {
-      response = "ERROR: " + std::string(e.what()) + "\n";
     }
-
-    Rio_writen(m_client_fd, response.c_str(), response.size());
-  }
 }
 
-Server *ClientConnection::get_server() const {
-  return m_server;
+void ClientConnection::unlock_table(Table* table) {
+    if (!in_transaction) {
+        table->unlock();
+    }
+    // In transaction mode, tables remain locked until COMMIT or ROLLBACK
 }
 
-// TODO: additional member functions
+void ClientConnection::rollback_transaction() {
+    if (in_transaction) {
+        for (Table* t : locked_tables) {
+            t->rollback_changes();
+            t->unlock();
+        }
+        locked_tables.clear();
+        in_transaction = false;
+    }
+}
+
+Server* ClientConnection::get_server() const {
+    return m_server;
+}
