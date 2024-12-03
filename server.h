@@ -3,6 +3,7 @@
 
 #include <map>
 #include <string>
+#include <mutex>
 #include <pthread.h>
 #include "table.h"
 #include "client_connection.h"
@@ -10,6 +11,10 @@
 class Server {
 private:
   // TODO: add member variables
+  int listen_fd;
+  std::map<std::string, std::unique_ptr<Table>> tables;
+  std::mutex tables_mutex;
+  std::mutex log_mutex;
 
   // copy constructor and assignment operator are prohibited
   Server( const Server & );
@@ -25,6 +30,8 @@ public:
   static void *client_worker( void *arg );
 
   void log_error( const std::string &what );
+  void create_table( const std::string &name );
+  Table *find_table( const std::string &name );
 
   // TODO: add member functions
 

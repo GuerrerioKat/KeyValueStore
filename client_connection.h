@@ -25,6 +25,7 @@ public:
   void chat_with_client();
 
   // TODO: additional member functions
+  Server *ClientConnection::get_server() const;
 };
 
 #endif // CLIENT_CONNECTION_H
