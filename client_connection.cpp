@@ -46,7 +46,7 @@ void ClientConnection::chat_with_client() {
             }
 
             if (command == "LOGIN") {
-                // No action required for LOGIN
+                //do we have to do anything here?
                 Message msg(MessageType::OK, {});
                 MessageSerialization::encode(msg, response);
             } else if (command == "CREATE") {
@@ -80,8 +80,7 @@ void ClientConnection::chat_with_client() {
 
                 stack.push(value);
 
-                // Unlock the table if not in transaction
-                unlock_table(table);
+                unlock_table(table); //unlock the table if not in transaction
 
                 Message msg(MessageType::OK, {});
                 MessageSerialization::encode(msg, response);
@@ -90,7 +89,6 @@ void ClientConnection::chat_with_client() {
                 std::string key = request_msg.get_key();
                 table = m_server->find_table(table_name);
 
-                // Lock the table
                 lock_table(table);
 
                 if (stack.empty()) {
@@ -103,7 +101,7 @@ void ClientConnection::chat_with_client() {
 
                 table->set(key, s_value);
 
-                // Commit changes and unlock the table if not in transaction
+                //commit changes and unlock the table if not in transaction
                 if (!in_transaction) {
                     table->commit_changes();
                     unlock_table(table);
@@ -155,7 +153,7 @@ void ClientConnection::chat_with_client() {
                 if (!in_transaction) {
                     throw OperationException("No transaction in progress");
                 }
-                // Commit changes to all locked tables and unlock them
+                //commit changes to all locked tables and unlock them
                 for (Table* t : locked_tables) {
                     t->commit_changes();
                     t->unlock();
@@ -165,14 +163,13 @@ void ClientConnection::chat_with_client() {
                 Message msg(MessageType::OK, {});
                 MessageSerialization::encode(msg, response);
             } else if (command == "BYE") {
-                // Rollback any transaction in progress
                 if (in_transaction) {
-                    rollback_transaction();
+                    rollback_transaction(); //if no commit, rollback
                 }
                 Message msg(MessageType::OK, {});
                 MessageSerialization::encode(msg, response);
                 Rio_writen(m_client_fd, response.c_str(), response.size());
-                break; // End the connection
+                break; //end connection
             } else {
                 throw InvalidMessage("Invalid command: " + command);
             }
@@ -183,9 +180,8 @@ void ClientConnection::chat_with_client() {
             Message msg(MessageType::ERROR, {e.what()});
             MessageSerialization::encode(msg, response);
             Rio_writen(m_client_fd, response.c_str(), response.size());
-            break; // End the connection on ERROR
+            break; //doesn't coninue on an error
         } catch (const FailedTransaction &e) {
-            // Rollback transaction
             rollback_transaction();
             Message msg(MessageType::FAILED, {e.what()});
             MessageSerialization::encode(msg, response);
@@ -195,12 +191,12 @@ void ClientConnection::chat_with_client() {
             MessageSerialization::encode(msg, response);
             Rio_writen(m_client_fd, response.c_str(), response.size());
         } catch (const std::exception &e) {
-            // Rollback transaction
             rollback_transaction();
+
             Message msg(MessageType::ERROR, {e.what()});
             MessageSerialization::encode(msg, response);
             Rio_writen(m_client_fd, response.c_str(), response.size());
-            break; // End the connection on ERROR
+            break; //doesn't coninue on an error
         }
         num_requests++;
     }
