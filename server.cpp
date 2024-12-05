@@ -91,7 +91,7 @@ void Server::create_table(const std::string &name) {
     throw std::runtime_error("This table already exists: " + name);
   }
   tables[name] = std::make_unique<Table>(name);
-  print_tables();
+  //print_tables();
 }
 
 Table *Server::find_table(const std::string &name) {
@@ -100,14 +100,12 @@ Table *Server::find_table(const std::string &name) {
   if (it == tables.end()) {
     throw std::runtime_error("This table could not be found: " + name);
   }
-  print_tables();
+  //print_tables();
   return it->second.get();
 }
 
 void Server::print_tables()
 {
-  std::lock_guard<std::mutex> lock(tables_mutex);
-
   std::cout << "Server Tables:" << std::endl;
   for (const auto& table_entry : tables) {
     // table_entry.first is the table name (key in the map)

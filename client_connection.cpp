@@ -9,6 +9,8 @@
 #include "exceptions.h"
 #include "client_connection.h"
 
+//Return values of all calls to I/O functions must be checked!!!
+
 ClientConnection::ClientConnection( Server *server, int client_fd )
   : m_server( server )
   , m_client_fd( client_fd )
@@ -25,7 +27,7 @@ void ClientConnection::chat_with_client() {
     char buf[MAXLINE];
     int num_requests = 0;
     while (true) {
-        ssize_t n = Rio_readlineb(&m_fdbuf, buf, MAXLINE);
+        ssize_t n = rio_readlineb(&m_fdbuf, buf, MAXLINE);
         if (n <= 0) {
             break;
         }
@@ -39,11 +41,13 @@ void ClientConnection::chat_with_client() {
             std::string command = message_type_to_string(message_type);
 
             if (num_requests == 0 && command != "LOGIN") {
-                Message msg(MessageType::FAILED, {"First command must be a LOGIN"});
+                Message msg(MessageType::ERROR, {"First command must be a LOGIN"});
                 MessageSerialization::encode(msg, response);
-                Rio_writen(m_client_fd, response.c_str(), response.size());
-                continue;
+                rio_writen(m_client_fd, response.c_str(), response.size()); //throw CommException
+                break;
             }
+
+            num_requests++;
 
             if (command == "LOGIN") {
                 //do we have to do anything here?
@@ -59,13 +63,13 @@ void ClientConnection::chat_with_client() {
                 std::string key = request_msg.get_key();
                 table = m_server->find_table(table_name);
 
-                // Lock the table
                 lock_table(table);
 
                 if (!table->has_key(key)) {
                     throw OperationException("Key does not exist: " + key);
                 }
-
+                
+                //how are we supposed to handle non-integer arithmetic? stack is currenlty only set to handle integers
                 std::string s_value = table->get(key);
                 int value;
                 try {
@@ -168,18 +172,18 @@ void ClientConnection::chat_with_client() {
                 }
                 Message msg(MessageType::OK, {});
                 MessageSerialization::encode(msg, response);
-                Rio_writen(m_client_fd, response.c_str(), response.size());
+                rio_writen(m_client_fd, response.c_str(), response.size());
                 break; //end connection
             } else {
                 throw InvalidMessage("Invalid command: " + command);
             }
 
-            Rio_writen(m_client_fd, response.c_str(), response.size());
+            rio_writen(m_client_fd, response.c_str(), response.size());
             num_requests++;
         } catch (const InvalidMessage &e) {
             Message msg(MessageType::ERROR, {e.what()});
             MessageSerialization::encode(msg, response);
-            Rio_writen(m_client_fd, response.c_str(), response.size());
+            rio_writen(m_client_fd, response.c_str(), response.size());
             break; //doesn't coninue on an error
         } catch (const FailedTransaction &e) {
             rollback_transaction();
@@ -189,19 +193,19 @@ void ClientConnection::chat_with_client() {
         } catch (const OperationException &e) {
             Message msg(MessageType::FAILED, {e.what()});
             MessageSerialization::encode(msg, response);
-            Rio_writen(m_client_fd, response.c_str(), response.size());
+            rio_writen(m_client_fd, response.c_str(), response.size());
         } catch (const std::exception &e) {
             rollback_transaction();
 
             Message msg(MessageType::ERROR, {e.what()});
             MessageSerialization::encode(msg, response);
-            Rio_writen(m_client_fd, response.c_str(), response.size());
+            rio_writen(m_client_fd, response.c_str(), response.size());
             break; //doesn't coninue on an error
-        }
-        num_requests++;
+        } //catch CommException and release any held resources and end the thread
     }
 }
 
+//values are supposed to be strings, only need to integers here
 void ClientConnection::handle_arithmetic_operation(const std::string& operation) {
     if (stack.size() < 2) {
         throw OperationException("Not enough operands on stack");
@@ -215,14 +219,14 @@ void ClientConnection::handle_arithmetic_operation(const std::string& operation)
     if (operation == "ADD") {
         result = value1 + value2;
     } else if (operation == "SUB") {
-        result = value2 - value1; // Note the order
+        result = value2 - value1;
     } else if (operation == "MUL") {
         result = value1 * value2;
     } else if (operation == "DIV") {
         if (value1 == 0) {
             throw OperationException("Division by zero");
         }
-        result = value2 / value1; // Note the order
+        result = value2 / value1;
     } else {
         throw OperationException("Unknown operation");
     }
